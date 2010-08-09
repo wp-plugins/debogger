@@ -5,7 +5,7 @@ Plugin Name: DeBogger
 Plugin URI: http://www.pross.org.uk
 Description: A simple tool for debugging themes.
 Author: Simon Prosser
-Version: 0.3
+Version: 0.4
 Author URI: http://www.pross.org.uk
 */
 
@@ -56,10 +56,12 @@ function show_normal() {
 }
 
 function bog_debug() {
-	$bogger = get_option('debog');
-	if (!$bogger)	{
-			$bogger = 'on';
-					}
+if ( !isset($options) ) $options = get_option('debog');
+if ( !is_array($options) ) {
+$options[] = default_bog();
+update_option('debog', $options);
+}
+$bogger = $options['debog'];
 if ($bogger === 'on')	{
 	set_error_handler("myErrorHandler");
 						}
@@ -80,6 +82,11 @@ $_warn_count = 0;
 //add links to footer:
 
 function bog_footer() {
+if ( !isset($options) ) $options = get_option('debog');
+if ( !is_array($options) ) {
+$options[] = default_bog();
+update_option('debog', $options);
+}
 global $my_error;
 global $_notice_count;
 global $_warn_count;
@@ -93,17 +100,18 @@ if (isset($_GET['bog'])):
 	else:
 	// security pass! 
 	if ($_GET['bog'] === 'on')	{
-		update_option('debog', 'on');
+		$options['debog'] = 'on';
 		set_error_handler("myErrorHandler");
 								}
 	if ($_GET['bog'] == 'off')	{
-		update_option('debog', 'off');
+		$options['debog'] = 'off';
 		set_error_handler("show_normal");
 								}
 	if ($_GET['bog'] == 'sup') 	{
-		update_option('debog', 'sup');
+		$options['debog'] = 'sup';
 		set_error_handler("myblank");
 								}
+	update_option('debog', $options);
 	endif;
 	endif;
 global $user_ID; if( $user_ID ) :
@@ -125,7 +133,6 @@ global $user_ID; if( $user_ID ) :
 		}
 
 		echo '<div style="background-color: #' . $color .'; text-align: left; display: block; clear: both; margin-left: auto; margin-right: auto; border: 1px dashed red; width: 70%; color: #000; padding: 10px;">';
-
 		$nonce= wp_create_nonce('bog-nonce');
 		echo '<a style="color: #000;" href="' . strtok( esc_url( $_SERVER['REQUEST_URI'] ), '?' ) . '?_wpnonce=' . $nonce . '&amp;bog=on">Activate Debog</a>&nbsp;&nbsp;&nbsp;';
 		echo '<a style="color: #000;" href="' . strtok( esc_url( $_SERVER['REQUEST_URI'] ), '?' ) . '?_wpnonce=' . $nonce . '&amp;bog=off">Normal</a>&nbsp;&nbsp;&nbsp;';
@@ -134,13 +141,11 @@ global $user_ID; if( $user_ID ) :
 			$url = 'http://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
 			echo $w3c;
 
-	echo '<span style="text-align: right; float: right; color: #000;"><small>Debogger by Pross&nbsp;&nbsp;&nbsp;bog status: <strong>'. get_option('debog') . '</strong>';
+	echo '<span style="text-align: right; float: right; color: #000;"><small>Debogger by Pross&nbsp;&nbsp;&nbsp;bog status: <strong>'. $options['debog'] . '</strong>';
 
 
 
 echo ( defined('FIXPRESS') ) ? '&nbsp;&nbsp;Using FixPress v' . FIXPRESS : '';
-//		echo 
-//	endif;
 	echo '</span>';
 		if ($debog_notice):
 		echo "<br /><br /><h3>Need to be fixed: $_notice_count</h3>";
@@ -152,7 +157,7 @@ echo ( defined('FIXPRESS') ) ? '&nbsp;&nbsp;Using FixPress v' . FIXPRESS : '';
 	endif;
 
 if ($debog_notice || $debog_warn ):
-$data = get_theme_data( TEMPLATEPATH . '/style.css' );
+$themedata = get_theme_data( TEMPLATEPATH . '/style.css' );
 echo '<a onmouseclick="ShowContent(\'uniquename\'); return true;" href="javascript:ShowContent(\'uniquename\')">[show]</a>';
 echo '
 <div id="uniquename" 
@@ -160,27 +165,10 @@ echo '
       border-style: solid; 
       background-color: white; 
       padding: 5px;">';
-?>
-<span>
-Theme Review: '''<?php echo $data[ 'Name' ] . ' v' . $data[ 'Version' ]; ?>'''<br />
-=> Themes should be reviewed using '''define('WP_DEBUG', true);''' in wp-config.php<br />
-=> Themes should be reviewed using the test data from the [http://codex.wordpress.org/Theme_Unit_Test Theme Checklists]<br />
-----<br />
-'''WP_DEBUG et al.:'''<br />
-<?php if (!empty( $debog_warn ) ) echo $debog_warn; ?>
-<?php if (!empty( $debog_notice ) ) echo $debog_notice; ?>
-----<br />
-'''Theme Test Data:'''<br />
-{ INSERT REVIEW }
-<br />
-----<br />
-Overall: '''not-accepted'''<br />
-- Items marked (=>) '''must''' be addressed.<br />
-- Other items noted should be addressed and corrected as needed.<br />
-- Additional review may be required once the above issues are resolved.<br />
-</span>
-</div>
-<?php
+$data = array('theme' => $themedata[ 'Name' ] . ' v' . $themedata[ 'Version' ], 'warn' => $debog_warn, 'notice' => $debog_notice); 
+
+echo parse_template($data);
+
 endif;
 	echo '</div>';
 	endif;
@@ -219,46 +207,7 @@ return $url.' is NOT valid! ' . count($r->errors) . ' errors ' . count($r->warni
 
 	
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 function bog_check_($url) {
@@ -325,4 +274,88 @@ else { document.getElementById(d).style.display = "none"; }
 ';
 endif;
 endif;
+}
+
+function parse_template($data) {
+// example template variables {a} and {bc}
+// example $data array
+// $data = Array("a" => 'one', "bc" => 'two');
+$options = get_option('debog');
+if ( empty($options['sometext']) ) $options['sometext'] = trac_template();
+    $q = $options['sometext'];
+    foreach ($data as $key => $value) {
+        $q = str_replace('{'.$key.'}', $value, $q);
+    }
+    return $q;
+}
+
+
+
+
+add_action('admin_init', 'debogoptions_init' );
+add_action('admin_menu', 'debogoptions_add_page');
+
+// Init plugin options to white list our options
+function debogoptions_init(){
+	register_setting( 'debogoptions_options', 'debog', 'debogoptions_validate' );
+}
+
+// Add menu page
+function debogoptions_add_page() {
+	add_options_page('Debogger Options', 'Debogger Options', 'manage_options', 'debogoptions', 'debogoptions_do_page');
+}
+
+// Draw the menu page itself
+function debogoptions_do_page() {
+	?>
+	<div class="wrap">
+		<h2>Debogger Options</h2>
+		<form method="post" action="options.php">
+			<?php settings_fields('debogoptions_options'); ?>
+			<?php $options = get_option('debog'); ?>
+			<?php if ( empty($options['sometext']) ) $options['sometext'] = trac_template(); ?>
+			<table class="form-table">
+				<tr valign="top"><th scope="row">Template values:<br />{theme}<br />{warn}<br />{notice}</th>
+					<td><textarea cols="60" rows="20" name="debog[sometext]"><?php echo $options['sometext']; ?></textarea></td>
+				</tr>
+			</table>
+			<p class="submit">
+			<input type="submit" class="button-primary" value="<?php _e('Save Changes') ?>" />
+			</p>
+		</form>
+	</div>
+	<?php	
+}
+
+// Sanitize and validate input. Accepts an array, return a sanitized array.
+function debogoptions_validate($input) {
+	// Our first value is either 0 or 1
+//	$input['option1'] = ( $input['option1'] == 1 ? 1 : 0 );
+	
+	// Say our second option must be safe text with no HTML tags
+//	$input['sometext'] =  wp_filter_nohtml_kses($input['sometext']);
+	
+	return $input;
+}
+function trac_template() {
+return "Theme Review: '''{theme}'''<br />
+=> Themes should be reviewed using '''define('WP_DEBUG', true);''' in wp-config.php<br />
+=> Themes should be reviewed using the test data from the [http://codex.wordpress.org/Theme_Unit_Test Theme Checklists]<br />
+----<br />
+'''WP_DEBUG et al.:'''<br />
+{warn}
+{notice}
+----<br />
+'''Theme Test Data:'''<br />
+{ INSERT REVIEW }<br />
+----<br />
+Overall: '''not-accepted'''<br />
+- Items marked (=>) '''must''' be addressed.<br />
+- Other items noted should be addressed and corrected as needed.<br />
+- Additional review may be required once the above issues are resolved.";
+}
+
+function default_bog() {
+$options = array( 'sometext' => trac_template(), 'debog' => 'on', 'set' => 'yes');
+return $options;
 }
