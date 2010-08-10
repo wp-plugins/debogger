@@ -58,9 +58,10 @@ function show_normal() {
 function bog_debug() {
 if ( !isset($options) ) $options = get_option('debog');
 if ( !is_array($options) ) {
-$options[] = default_bog();
+$options = default_bog($options);
 update_option('debog', $options);
 }
+
 $bogger = $options['debog'];
 if ($bogger === 'on')	{
 	set_error_handler("myErrorHandler");
@@ -84,7 +85,7 @@ $_warn_count = 0;
 function bog_footer() {
 if ( !isset($options) ) $options = get_option('debog');
 if ( !is_array($options) ) {
-$options[] = default_bog();
+$options = default_bog($options);
 update_option('debog', $options);
 }
 global $my_error;
@@ -355,7 +356,7 @@ Overall: '''not-accepted'''<br />
 - Additional review may be required once the above issues are resolved.";
 }
 
-function default_bog() {
+function default_bog($options) {
 $options = array( 'sometext' => trac_template(), 'debog' => 'on', 'set' => 'yes');
 return $options;
 }
