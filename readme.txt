@@ -13,7 +13,8 @@ Debugging tool for theme authors and reviewers.
 This tool intercepts all debug information and prints it all out neatly into the footer. It also checks each page for W3C validation. 
 
 == Changelog ==
-
+= 0.5 =
+* Fixed bug, default settings were not being saved.
 = 0.4 =
 * Trac formatting now using basic templating, configurable in wp-admin.
 = 0.3 =
