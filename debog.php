@@ -56,8 +56,9 @@ function show_normal() {
 }
 
 function bog_debug() {
-if ( !isset($options) ) $options = get_option('debog');
-if ( !is_array($options) ) {
+if ( !isset($options) ) $options = get_option('debog'); //no options...
+
+if ( !is_array($options) || !isset($options['debog']) ) {
 $options = default_bog($options);
 update_option('debog', $options);
 }
