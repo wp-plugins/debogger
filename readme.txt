@@ -1,2 +1,2 @@
 === Debogger ===
-Stable tag: 0.7
+Stable tag: 0.71

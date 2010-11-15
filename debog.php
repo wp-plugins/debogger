@@ -5,10 +5,10 @@ Plugin Name: DeBogger
 Plugin URI: http://www.pross.org.uk
 Description: A simple tool for debugging themes.
 Author: Simon Prosser
-Version: 0.7
+Version: 0.71
 Author URI: http://www.pross.org.uk
 */
-define('BOGVERSION', '0.7');
+define('BOGVERSION', '0.71');
 add_action('init', 'bog_debug', 5);
 if ( is_admin() ):
 add_action('admin_footer', 'bog_footer');
@@ -47,7 +47,7 @@ $options = get_option('debog'); //no options...
 				// local installation
 				$theme_directory = str_replace("/", "\\", $theme_directory);
 			}
-			if (substr_count($debog_msg, $theme_directory) > 0) {
+			if (substr_count($debog_msg, basename( $theme_directory ) ) > 0) {
 				$debog_warn .= $debog_msg;
 			}
 			endif;
