@@ -5,10 +5,10 @@ Plugin Name: DeBogger
 Plugin URI: http://www.pross.org.uk
 Description: A simple tool for debugging themes.
 Author: Simon Prosser
-Version: 0.4
+Version: 0.7
 Author URI: http://www.pross.org.uk
 */
-
+define('BOGVERSION', '0.7');
 add_action('init', 'bog_debug', 5);
 if ( is_admin() ):
 add_action('admin_footer', 'bog_footer');
@@ -17,28 +17,44 @@ else:
 add_action('wp_footer', 'bog_footer');
 add_action('wp_head', 'bog_head');
 endif;
+add_filter('wp_footer', 'memory');
+function memory() {
+if( current_user_can('level_10') ) :
+global $wpdb;
+echo '<span style="text-align:center;display:block;">';
+$timer = timer_stop();
+echo round(memory_get_peak_usage()/1048576,2) . 'M ' . get_num_queries() . ' queries in '. $timer . ' Seconds.</span>';
+endif;
+}
+
 // error handler function
 function myErrorHandler($errno, $errstr, $errfile, $errline, $errcontext) {
 global $debog_notice;
 global $_notice_count;
 global $debog_warn;
 global $_warn_count;
+$options = get_option('debog'); //no options...
     switch ($errno) {
     case E_NOTICE:
 		if (!preg_match('/\/wp-includes\//',$errfile)):
 			$_warn_count++;
 			$terrfile = strxchr($errfile, '/wp-content/');
 			$errfile = str_replace( $terrfile[0], '', $errfile ) ;
-			$debog_msg = '<b>-- Debug: </b>' . $errstr . ' on line ' . $errline . ' of ' . $errfile . '<br />';
-			//if (!preg_match("/" . strip_tags($debog_msg) . "/", strip_tags($debog_warn) ) ) {
+			$debog_msg = $options['notice'] . $errstr . ' on line ' . $errline . ' of ' . $errfile . '<br />';
+			// Limit Debogger to the current theme
+			$theme_directory = get_stylesheet_directory();
+			if (substr($theme_directory, 1, 1) == ':') {
+				// local installation
+				$theme_directory = str_replace("/", "\\", $theme_directory);
+			}
+			if (substr_count($debog_msg, $theme_directory) > 0) {
 				$debog_warn .= $debog_msg;
-		//	}
+			}
 			endif;
     break;
     case E_USER_NOTICE:
 		$_notice_count++;
-	//	$backtrace = adodb_backtrace();
-		$debog_notice .= '<b>=> </b> ' . $errstr . '<br />';
+		$debog_notice .= $options['u_notice'] . $errstr . '<br />';
     break;
     }
     /* Don't execute PHP internal error handler */
@@ -56,13 +72,14 @@ function show_normal() {
 }
 
 function bog_debug() {
-if ( !isset($options) ) $options = get_option('debog');
-if ( !is_array($options) ) {
-$options = default_bog($options);
+$options = get_option('debog'); // read options
+if ( !isset( $options['version'] ) || $options['version'] != BOGVERSION ):
+$options = default_bog();
 update_option('debog', $options);
-}
+endif;
 
-$bogger = $options['debog'];
+
+$bogger = $options['active'];
 if ($bogger === 'on')	{
 	set_error_handler("myErrorHandler");
 						}
@@ -83,11 +100,7 @@ $_warn_count = 0;
 //add links to footer:
 
 function bog_footer() {
-if ( !isset($options) ) $options = get_option('debog');
-if ( !is_array($options) ) {
-$options = default_bog($options);
-update_option('debog', $options);
-}
+$options = get_option('debog'); // read options
 global $my_error;
 global $_notice_count;
 global $_warn_count;
@@ -101,15 +114,15 @@ if (isset($_GET['bog'])):
 	else:
 	// security pass! 
 	if ($_GET['bog'] === 'on')	{
-		$options['debog'] = 'on';
+		$options['active'] = 'on';
 		set_error_handler("myErrorHandler");
 								}
 	if ($_GET['bog'] == 'off')	{
-		$options['debog'] = 'off';
+		$options['active'] = 'off';
 		set_error_handler("show_normal");
 								}
 	if ($_GET['bog'] == 'sup') 	{
-		$options['debog'] = 'sup';
+		$options['active'] = 'sup';
 		set_error_handler("myblank");
 								}
 	update_option('debog', $options);
@@ -117,13 +130,18 @@ if (isset($_GET['bog'])):
 	endif;
 global $user_ID; if( $user_ID ) :
 	if( current_user_can('level_10') ) :
-		echo '</div></div></div></div></div></div></div></div></div>'; // just in case there are uncloded divs!
+		echo '</div></div></div></div></div></div></div></div></div>'; // just in case there are unclosed divs!
 
 // ok were ready!
 			$url = 'http://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+if ($_SERVER['SERVER_NAME'] == '127.0.0.1' || $_SERVER['SERVER_NAME'] == 'localhost') $local = 'local';
+			if (!isset( $local )):
 			$w3c =  bog_check_( $url );
+			else:
+			$w3c = 'local mode no W3C check!';
+			endif;
 	$color = '99FF99';
-	if ( $w3c != 'W3C Valid!(cached)' && $w3c != 'W3C Valid!(not cached)' ) { 
+	if ( $w3c != 'W3C Valid!(cached)' && $w3c != 'W3C Valid!(not cached)' && $w3c != 'local mode no W3C check!' ) { 
 		$color = 'FF9999';
 		}	
 		if ( $debog_notice ) {
@@ -135,16 +153,26 @@ global $user_ID; if( $user_ID ) :
 
 		echo '<div style="background-color: #' . $color .'; text-align: left; display: block; clear: both; margin-left: auto; margin-right: auto; border: 1px dashed red; width: 70%; color: #000; padding: 10px;">';
 		$nonce= wp_create_nonce('bog-nonce');
+if ($options['active'] == 'on') {
+		echo '<span style="color: #000;">Activated</span>&nbsp;&nbsp;&nbsp;';
+		} else { 
 		echo '<a style="color: #000;" href="' . strtok( esc_url( $_SERVER['REQUEST_URI'] ), '?' ) . '?_wpnonce=' . $nonce . '&amp;bog=on">Activate Debog</a>&nbsp;&nbsp;&nbsp;';
-		echo '<a style="color: #000;" href="' . strtok( esc_url( $_SERVER['REQUEST_URI'] ), '?' ) . '?_wpnonce=' . $nonce . '&amp;bog=off">Normal</a>&nbsp;&nbsp;&nbsp;';
-		echo '<a style="color: #000;" href="' . strtok( esc_url( $_SERVER['REQUEST_URI'] ), '?' ) . '?_wpnonce=' . $nonce . '&amp;bog=sup">Suppress Debug</a>&nbsp;&nbsp;&nbsp;';
-
+		}
+if ($options['active'] == 'off') {
+		echo '<span style="color: #000;">Bypassing</span>&nbsp;&nbsp;&nbsp;';
+		} else { 
+		echo '<a style="color: #000;" href="' . strtok( esc_url( $_SERVER['REQUEST_URI'] ), '?' ) . '?_wpnonce=' . $nonce . '&amp;bog=off">Bypass</a>&nbsp;&nbsp;&nbsp;';
+		}
+if ($options['active'] == 'sup') {
+		echo '<span style="color: #000;">Suppressing</span>&nbsp;&nbsp;&nbsp;';
+		} else { 
+		echo '<a style="color: #000;" href="' . strtok( esc_url( $_SERVER['REQUEST_URI'] ), '?' ) . '?_wpnonce=' . $nonce . '&amp;bog=sup">Suppress Errors</a>&nbsp;&nbsp;&nbsp;';
+		}
 			$url = 'http://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
 			echo $w3c;
+if (!defined('WP_DEBUG') || WP_DEBUG == false ) echo '<span><strong> WP_DEBUG is not enabled!</strong></span>';
 
-	echo '<span style="text-align: right; float: right; color: #000;"><small>Debogger by Pross&nbsp;&nbsp;&nbsp;bog status: <strong>'. $options['debog'] . '</strong>';
-
-
+	echo '<span style="text-align: right; float: right; color: #000;"><small><a href="http://pross.org.uk/">Debogger by Pross</a>&nbsp;&nbsp;&nbsp;bog status: <strong>'. $options['active'] . '</strong>';
 
 echo ( defined('FIXPRESS') ) ? '&nbsp;&nbsp;Using FixPress v' . FIXPRESS : '';
 	echo '</span>';
@@ -168,7 +196,7 @@ echo '
       padding: 5px;">';
 $data = array('theme' => $themedata[ 'Name' ] . ' v' . $themedata[ 'Version' ], 'warn' => $debog_warn, 'notice' => $debog_notice); 
 
-echo parse_template($data);
+echo _parse_template($data);
 
 endif;
 	echo '</div>';
@@ -192,24 +220,6 @@ function strxchr($haystack, $needle, $l_inclusive = 0, $r_inclusive = 0){
        else return false;
    }
 }
-
-
-function bog_check($url) {
-require_once 'Services/W3C/HTMLValidator.php';
-
-$v = new Services_W3C_HTMLValidator();
-$r = $v->validate($url);
-if ($r->isValid()) {
-    return $url.' is valid!';
-} else {
-
-
-return $url.' is NOT valid! ' . count($r->errors) . ' errors ' . count($r->warnings) . ' warnings. (<a target="_blank" href="http://validator.w3.org/check?uri=' . $url . '&charset=%28detect+automatically%29&doctype=Inline">W3C</a>)';
-
-	
-}
-}
-
 
 function bog_check_($url) {
 
@@ -277,7 +287,7 @@ endif;
 endif;
 }
 
-function parse_template($data) {
+function _parse_template($data) {
 // example template variables {a} and {bc}
 // example $data array
 // $data = Array("a" => 'one', "bc" => 'two');
@@ -298,12 +308,12 @@ add_action('admin_menu', 'debogoptions_add_page');
 
 // Init plugin options to white list our options
 function debogoptions_init(){
-	register_setting( 'debogoptions_options', 'debog', 'debogoptions_validate' );
+	register_setting( 'debogoptions_options', 'debog' );
 }
 
 // Add menu page
 function debogoptions_add_page() {
-	add_options_page('Debogger Options', 'Debogger Options', 'manage_options', 'debogoptions', 'debogoptions_do_page');
+add_options_page('Debogger Options', 'Debogger Options', 'manage_options', 'debogoptions', 'debogoptions_do_page');
 }
 
 // Draw the menu page itself
@@ -319,8 +329,14 @@ function debogoptions_do_page() {
 				<tr valign="top"><th scope="row">Template values:<br />{theme}<br />{warn}<br />{notice}</th>
 					<td><textarea cols="60" rows="20" name="debog[sometext]"><?php echo $options['sometext']; ?></textarea></td>
 				</tr>
+				<tr valign="top"><th scope="row">Trac Prefixes:</th>
+					<td><input type="text" name="debog[notice]" value="<?php echo $options['notice']; ?>" /> Notices (normal PHP errors)<br />
+					<input type="text" name="debog[u_notice]" value="<?php echo $options['u_notice']; ?>" /> User_Notices (Wordpress errors)</td>
+				</tr>
 			</table>
 			<p class="submit">
+<input type="hidden" name="debog[version]" value="<?php echo $options['version']; ?>" />
+<input type="hidden" name="debog[active]" value="<?php echo $options['active']; ?>" />
 			<input type="submit" class="button-primary" value="<?php _e('Save Changes') ?>" />
 			</p>
 		</form>
@@ -328,16 +344,6 @@ function debogoptions_do_page() {
 	<?php	
 }
 
-// Sanitize and validate input. Accepts an array, return a sanitized array.
-function debogoptions_validate($input) {
-	// Our first value is either 0 or 1
-//	$input['option1'] = ( $input['option1'] == 1 ? 1 : 0 );
-	
-	// Say our second option must be safe text with no HTML tags
-//	$input['sometext'] =  wp_filter_nohtml_kses($input['sometext']);
-	
-	return $input;
-}
 function trac_template() {
 return "Theme Review: '''{theme}'''<br />
 => Themes should be reviewed using '''define('WP_DEBUG', true);''' in wp-config.php<br />
@@ -356,7 +362,12 @@ Overall: '''not-accepted'''<br />
 - Additional review may be required once the above issues are resolved.";
 }
 
-function default_bog($options) {
-$options = array( 'sometext' => trac_template(), 'debog' => 'on', 'set' => 'yes');
+function default_bog() {
+$options = array();
+$options['notice'] = '<strong>-- Debug: </strong>';
+$options['u_notice'] = '<strong>=> Error: </strong>';
+$options['sometext'] = trac_template();
+$options['active'] = 'on';
+$options['version'] = BOGVERSION;
 return $options;
 }
